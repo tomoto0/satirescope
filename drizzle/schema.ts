@@ -25,4 +25,30 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const twitterConfigs = mysqlTable("twitter_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  xApiKey: text("x_api_key").notNull(), // Encrypted
+  xApiKeySecret: text("x_api_key_secret").notNull(), // Encrypted
+  xAccessToken: text("x_access_token").notNull(), // Encrypted
+  xAccessTokenSecret: text("x_access_token_secret").notNull(), // Encrypted
+  isActive: int("is_active").default(1).notNull(), // 1 = true, 0 = false
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TwitterConfig = typeof twitterConfigs.$inferSelect;
+export type InsertTwitterConfig = typeof twitterConfigs.$inferInsert;
+
+export const postedTweets = mysqlTable("posted_tweets", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("config_id").notNull().references(() => twitterConfigs.id, { onDelete: "cascade" }),
+  tweetText: text("tweet_text").notNull(),
+  imageUrl: text("image_url"),
+  sourceNewsUrl: text("source_news_url"),
+  postedAt: timestamp("posted_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PostedTweet = typeof postedTweets.$inferSelect;
+export type InsertPostedTweet = typeof postedTweets.$inferInsert;

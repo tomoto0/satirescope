@@ -1,0 +1,255 @@
+import { z } from "zod";
+import { protectedProcedure, router } from "../_core/trpc";
+import {
+  getTwitterConfigsByUserId,
+  getTwitterConfigById,
+  createTwitterConfig,
+  updateTwitterConfig,
+  deleteTwitterConfig,
+  getPostedTweetsByConfigId,
+} from "../db";
+import { encryptReversible, decryptReversible } from "../crypto";
+import { TRPCError } from "@trpc/server";
+
+/**
+ * Twitter configuration router
+ * Handles CRUD operations for Twitter API credentials
+ */
+export const twitterRouter = router({
+  /**
+   * Get all Twitter configs for the current user
+   */
+  getConfigs: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const configs = await getTwitterConfigsByUserId(ctx.user.id);
+      // Don't return encrypted values to frontend
+      return configs.map((config) => ({
+        id: config.id,
+        isActive: config.isActive === 1,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt,
+      }));
+    } catch (error) {
+      console.error("[Twitter Router] Failed to get configs:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to fetch Twitter configurations",
+      });
+    }
+  }),
+
+  /**
+   * Create a new Twitter config
+   */
+  createConfig: protectedProcedure
+    .input(
+      z.object({
+        xApiKey: z.string().min(1, "API Key is required"),
+        xApiKeySecret: z.string().min(1, "API Key Secret is required"),
+        xAccessToken: z.string().min(1, "Access Token is required"),
+        xAccessTokenSecret: z.string().min(1, "Access Token Secret is required"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Encrypt sensitive data
+        const encryptedConfig = {
+          userId: ctx.user.id,
+          xApiKey: encryptReversible(input.xApiKey),
+          xApiKeySecret: encryptReversible(input.xApiKeySecret),
+          xAccessToken: encryptReversible(input.xAccessToken),
+          xAccessTokenSecret: encryptReversible(input.xAccessTokenSecret),
+          isActive: 1,
+        };
+
+        await createTwitterConfig(encryptedConfig);
+
+        return {
+          success: true,
+          message: "Twitter configuration created successfully",
+        };
+      } catch (error) {
+        console.error("[Twitter Router] Failed to create config:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create Twitter configuration",
+        });
+      }
+    }),
+
+  /**
+   * Update a Twitter config
+   */
+  updateConfig: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        xApiKey: z.string().optional(),
+        xApiKeySecret: z.string().optional(),
+        xAccessToken: z.string().optional(),
+        xAccessTokenSecret: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to update this configuration",
+          });
+        }
+
+        // Prepare update object
+        const updateData: Record<string, unknown> = {};
+        if (input.xApiKey) updateData.xApiKey = encryptReversible(input.xApiKey);
+        if (input.xApiKeySecret) updateData.xApiKeySecret = encryptReversible(input.xApiKeySecret);
+        if (input.xAccessToken) updateData.xAccessToken = encryptReversible(input.xAccessToken);
+        if (input.xAccessTokenSecret)
+          updateData.xAccessTokenSecret = encryptReversible(input.xAccessTokenSecret);
+
+        await updateTwitterConfig(input.configId, updateData as any);
+
+        return {
+          success: true,
+          message: "Twitter configuration updated successfully",
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to update config:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update Twitter configuration",
+        });
+      }
+    }),
+
+  /**
+   * Delete a Twitter config
+   */
+  deleteConfig: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to delete this configuration",
+          });
+        }
+
+        await deleteTwitterConfig(input.configId);
+
+        return {
+          success: true,
+          message: "Twitter configuration deleted successfully",
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to delete config:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to delete Twitter configuration",
+        });
+      }
+    }),
+
+  /**
+   * Toggle active status of a Twitter config
+   */
+  toggleActive: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to modify this configuration",
+          });
+        }
+
+        const newStatus = config.isActive === 1 ? 0 : 1;
+        await updateTwitterConfig(input.configId, { isActive: newStatus });
+
+        return {
+          success: true,
+          isActive: newStatus === 1,
+          message: `Twitter configuration ${newStatus === 1 ? "activated" : "deactivated"}`,
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to toggle active status:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to toggle Twitter configuration status",
+        });
+      }
+    }),
+
+  /**
+   * Get posted tweets for a config
+   */
+  getPostedTweets: protectedProcedure
+    .input(z.object({ configId: z.number(), limit: z.number().default(50) }))
+    .query(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to view this configuration's tweets",
+          });
+        }
+
+        const tweets = await getPostedTweetsByConfigId(input.configId, input.limit);
+        return tweets;
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to get posted tweets:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch posted tweets",
+        });
+      }
+    }),
+
+  /**
+   * Get decrypted credentials for a config (internal use only)
+   * This should only be called by backend services, never exposed to frontend
+   */
+  getDecryptedCredentials: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to access this configuration",
+          });
+        }
+
+        // Decrypt credentials
+        return {
+          xApiKey: decryptReversible(config.xApiKey),
+          xApiKeySecret: decryptReversible(config.xApiKeySecret),
+          xAccessToken: decryptReversible(config.xAccessToken),
+          xAccessTokenSecret: decryptReversible(config.xAccessTokenSecret),
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to get decrypted credentials:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to retrieve credentials",
+        });
+      }
+    }),
+});
