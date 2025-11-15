@@ -96,11 +96,16 @@
 ## Bug Fixes & Enhancements
 
 ### Navigation Issues
-- [ ] Settings ページのナビゲーション問題を修正
-- [ ] Settings ページにホームへ戻るボタンを追加
-- [ ] Posted Tweets ページにホームへ戻るボタンを追加
+- [x] Settings ページのナビゲーション問題を修正
+- [x] Settings ページにホームへ戻るボタンを追加
+- [x] Posted Tweets ページにホームへ戻るボタンを追加
 
 ### Manual Posting Feature
-- [ ] 手動投稿トリガーAPI実装
-- [ ] ホームページに手動投稿ボタンを追加
-- [ ] 手動投稿の進捗表示実装
+- [x] 手動投稿トリガーAPI実装
+- [x] ホームページに手動投稿ボタンを追加
+- [x] 手動投稿の進捗表示実装
+
+### News Retrieval Enhancement
+- [x] ニュース取得ロジックを改良（複数ニュースソース対応）
+- [x] 27個の異なるニュース記事を実装
+- [x] 実際のニュースメディア URL を使用
