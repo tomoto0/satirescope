@@ -32,26 +32,48 @@ export async function postTweetWithImage(
   sourceNewsUrl?: string
 ): Promise<{ success: boolean; tweetId?: string; error?: string }> {
   try {
-    console.log("[Twitter Poster] Posting tweet...");
+    console.log("[Twitter Poster] Posting tweet with image...");
+    console.log(`[Twitter Poster] Image URL: ${imageUrl}`);
+    console.log(`[Twitter Poster] Tweet text: ${tweetText}`);
 
     // Initialize Twitter client
     const client = initializeTwitterClient(config);
     const rwClient = client.readWrite;
 
     // Fetch image from URL
+    console.log("[Twitter Poster] Fetching image from URL...");
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
-      throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
+      throw new Error(`Failed to fetch image: ${imageResponse.statusText} (${imageResponse.status})`);
     }
 
     const imageBuffer = await imageResponse.arrayBuffer();
     const imageData = Buffer.from(imageBuffer);
+    console.log(`[Twitter Poster] Image fetched, size: ${imageData.length} bytes`);
 
-    // Upload media to Twitter
+    // Upload media to Twitter using v1.1 API
     console.log("[Twitter Poster] Uploading image to Twitter...");
-    const mediaData = await rwClient.v1.uploadMedia(imageData, {
-      mimeType: "image/jpeg",
-    });
+    let mediaId: string;
+    
+    try {
+      const mediaResponse = await rwClient.v1.uploadMedia(imageData, {
+        mimeType: "image/jpeg",
+      });
+      
+      // Extract media ID from response
+      if (typeof mediaResponse === "string") {
+        mediaId = mediaResponse;
+      } else if (mediaResponse && typeof mediaResponse === "object") {
+        mediaId = (mediaResponse as any).media_id_string || (mediaResponse as any).media_id;
+      } else {
+        throw new Error(`Invalid media response: ${JSON.stringify(mediaResponse)}`);
+      }
+      
+      console.log(`[Twitter Poster] Media uploaded successfully, ID: ${mediaId}`);
+    } catch (uploadError) {
+      console.error("[Twitter Poster] Media upload error:", uploadError);
+      throw new Error(`Failed to upload media: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
+    }
 
     // Build tweet text with source link
     let fullTweetText = tweetText;
@@ -59,37 +81,41 @@ export async function postTweetWithImage(
       fullTweetText += `\n\nSource: ${sourceNewsUrl}`;
     }
 
-    // Get media ID from response
-    const mediaId = typeof mediaData === "string" ? mediaData : (mediaData as any).media_id_string;
-
-    // Post tweet with media
+    // Post tweet with media using v2 API
     console.log("[Twitter Poster] Posting tweet with media...");
-    const tweet = await rwClient.v2.tweet({
-      text: fullTweetText,
-      media: {
-        media_ids: [mediaId],
-      },
-    });
+    try {
+      const tweet = await rwClient.v2.tweet({
+        text: fullTweetText,
+        media: {
+          media_ids: [mediaId],
+        },
+      });
 
-    console.log(`[Twitter Poster] Tweet posted successfully: ${(tweet.data as any).id}`);
+      const tweetId = (tweet.data as any).id;
+      console.log(`[Twitter Poster] Tweet posted successfully: ${tweetId}`);
 
-    // Log the posted tweet to database
-    await createPostedTweet({
-      configId: config.id,
-      tweetText: fullTweetText,
-      imageUrl: imageUrl,
-      sourceNewsUrl: sourceNewsUrl,
-    });
+      // Log the posted tweet to database
+      await createPostedTweet({
+        configId: config.id,
+        tweetText: fullTweetText,
+        imageUrl: imageUrl,
+        sourceNewsUrl: sourceNewsUrl,
+      });
 
-    return {
-      success: true,
-      tweetId: (tweet.data as any).id,
-    };
+      return {
+        success: true,
+        tweetId: tweetId,
+      };
+    } catch (tweetError) {
+      console.error("[Twitter Poster] Tweet posting error:", tweetError);
+      throw new Error(`Failed to post tweet: ${tweetError instanceof Error ? tweetError.message : String(tweetError)}`);
+    }
   } catch (error) {
-    console.error("[Twitter Poster] Failed to post tweet:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Twitter Poster] Failed to post tweet:", errorMessage);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     };
   }
 }
@@ -120,7 +146,8 @@ export async function postTweet(
       text: fullTweetText,
     });
 
-    console.log(`[Twitter Poster] Tweet posted successfully: ${(tweet.data as any).id}`);
+    const tweetId = (tweet.data as any).id;
+    console.log(`[Twitter Poster] Tweet posted successfully: ${tweetId}`);
 
     // Log the posted tweet to database
     await createPostedTweet({
@@ -131,13 +158,14 @@ export async function postTweet(
 
     return {
       success: true,
-      tweetId: (tweet.data as any).id,
+      tweetId: tweetId,
     };
   } catch (error) {
-    console.error("[Twitter Poster] Failed to post tweet:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Twitter Poster] Failed to post tweet:", errorMessage);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     };
   }
 }
@@ -163,10 +191,11 @@ export async function validateTwitterCredentials(
       valid: true,
     };
   } catch (error) {
-    console.error("[Twitter Poster] Credentials validation failed:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Twitter Poster] Credentials validation failed:", errorMessage);
     return {
       valid: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     };
   }
 }
