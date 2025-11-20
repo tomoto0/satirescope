@@ -1,0 +1,8 @@
+{
+  "query": "SELECT * FROM tweets ORDER BY createdAt DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3tgv6NbJQ4yLEzD.c8a05f3e07a3 --database eq2K3uhXAnhKkfx8kHCxLL --execute SELECT * FROM tweets ORDER BY createdAt DESC LIMIT 5;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'eq2k3uhxanhkkfx8khcxll.tweets' doesn't exist"
+  ]
+}

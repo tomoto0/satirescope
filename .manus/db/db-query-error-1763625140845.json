@@ -1,0 +1,8 @@
+{
+  "query": "SELECT * FROM posted_tweets ORDER BY postedAt DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3tgv6NbJQ4yLEzD.c8a05f3e07a3 --database eq2K3uhXAnhKkfx8kHCxLL --execute SELECT * FROM posted_tweets ORDER BY postedAt DESC LIMIT 5;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'postedAt' in 'order clause'"
+  ]
+}

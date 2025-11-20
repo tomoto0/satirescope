@@ -13,6 +13,8 @@ export interface NewsArticle {
   summary?: string;
   description?: string;
   publishedAt?: string;
+  author?: string;
+  imageUrl?: string;
 }
 
 /**
@@ -26,22 +28,22 @@ export interface GeneratedContent {
 }
 
 /**
- * Fetch news articles from Manus API
- * Uses the built-in Manus Data API to get real news from major outlets
+ * Fetch news articles from NewsAPI
+ * Uses the public NewsAPI to get real news from major outlets
  */
 export async function fetchNewsArticles(): Promise<NewsArticle[]> {
-  console.log("[News Engine] Fetching latest news articles from Manus API...");
+  console.log("[News Engine] Fetching latest news articles from NewsAPI...");
 
   try {
-    // Try to fetch from Manus API first
-    const articles = await fetchFromManusAPI();
+    // Try to fetch from NewsAPI first
+    const articles = await fetchFromNewsAPI();
     
     if (articles.length > 0) {
-      console.log(`[News Engine] Fetched ${articles.length} articles from Manus API`);
+      console.log(`[News Engine] Fetched ${articles.length} articles from NewsAPI`);
       return articles;
     }
 
-    console.warn("[News Engine] No articles from Manus API, using fallback articles");
+    console.warn("[News Engine] No articles from NewsAPI, using fallback articles");
     return getFallbackArticles();
   } catch (error) {
     console.error("[News Engine] Error fetching news:", error);
@@ -50,100 +52,87 @@ export async function fetchNewsArticles(): Promise<NewsArticle[]> {
 }
 
 /**
- * Fetch news from Manus API
+ * Fetch news from NewsAPI
  * Queries multiple news sources and returns diverse articles
  */
-async function fetchFromManusAPI(): Promise<NewsArticle[]> {
+async function fetchFromNewsAPI(): Promise<NewsArticle[]> {
   try {
-    console.log("[News Engine] Querying Manus API for news...");
+    if (!ENV.newsApiKey) {
+      console.warn("[News Engine] NEWS_API_KEY not configured, using fallback articles");
+      return [];
+    }
 
-    // List of major news sources to query
-    const newsSources = [
-      "BBC News",
-      "CNN",
-      "Reuters",
-      "AP News",
-      "The Guardian",
-      "New York Times",
-      "Washington Post",
-      "Financial Times",
-      "Al Jazeera",
-      "NPR",
-    ];
+    console.log("[News Engine] Querying NewsAPI for news...");
 
-    // Select random news sources
-    const selectedSources = newsSources.sort(() => Math.random() - 0.5).slice(0, 3);
+    // List of news categories to query
+    const categories = ["general", "business", "technology", "science", "health"];
+    
+    // Select random categories
+    const selectedCategories = categories.sort(() => Math.random() - 0.5).slice(0, 2);
     
     const articles: NewsArticle[] = [];
 
-    // Fetch from each selected source
-    for (const source of selectedSources) {
+    // Fetch from each selected category
+    for (const category of selectedCategories) {
       try {
-        const sourceArticles = await fetchNewsFromSource(source);
-        articles.push(...sourceArticles);
+        const categoryArticles = await fetchNewsFromCategory(category);
+        articles.push(...categoryArticles);
       } catch (error) {
-        console.warn(`[News Engine] Failed to fetch from ${source}:`, error);
+        console.warn(`[News Engine] Failed to fetch from category ${category}:`, error);
       }
     }
 
     // Shuffle and return top articles
     return articles.sort(() => Math.random() - 0.5).slice(0, 5);
   } catch (error) {
-    console.error("[News Engine] Error fetching from Manus API:", error);
+    console.error("[News Engine] Error fetching from NewsAPI:", error);
     return [];
   }
 }
 
 /**
- * Fetch news from a specific source using Manus API
+ * Fetch news from a specific category using NewsAPI
  */
-async function fetchNewsFromSource(source: string): Promise<NewsArticle[]> {
+async function fetchNewsFromCategory(category: string): Promise<NewsArticle[]> {
   try {
-    console.log(`[News Engine] Fetching news from ${source}...`);
+    console.log(`[News Engine] Fetching news from category: ${category}...`);
 
-    // Build search query
-    const searchQuery = `latest news from ${source} today`;
-
-    // Call Manus API
-    const response = await fetch(`${ENV.forgeApiUrl}/data_api/search`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${ENV.forgeApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: searchQuery,
-        limit: 5,
-        search_type: "news",
-      }),
-    });
+    // Call NewsAPI
+    const response = await fetch(
+      `https://newsapi.org/v2/top-headlines?category=${category}&sortBy=publishedAt&pageSize=10&apiKey=${ENV.newsApiKey}`
+    );
 
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
 
     const data = await response.json();
-    console.log(`[News Engine] Received data from ${source}:`, data);
+    console.log(`[News Engine] Received ${data.articles?.length || 0} articles from category ${category}`);
 
     // Parse response and extract articles
     const articles: NewsArticle[] = [];
     
-    if (data.results && Array.isArray(data.results)) {
-      for (const result of data.results) {
+    if (data.articles && Array.isArray(data.articles)) {
+      for (const article of data.articles) {
+        // Skip articles with no URL or title
+        if (!article.url || !article.title) continue;
+
         articles.push({
-          title: result.title || result.headline || "Breaking News",
-          url: result.url || result.link || "https://news.google.com",
-          source: source,
-          description: result.description || result.snippet || result.content,
-          content: result.content || result.body || result.description,
-          publishedAt: result.publishedAt || result.date || new Date().toISOString(),
+          title: article.title || "Breaking News",
+          url: article.url, // Use actual article URL from NewsAPI
+          source: article.source?.name || "News",
+          description: article.description || "",
+          content: article.content || article.description || "",
+          publishedAt: article.publishedAt || new Date().toISOString(),
+          author: article.author || "",
+          imageUrl: article.urlToImage || "",
         });
       }
     }
 
     return articles;
   } catch (error) {
-    console.error(`[News Engine] Error fetching from ${source}:`, error);
+    console.error(`[News Engine] Error fetching from category ${category}:`, error);
     return [];
   }
 }
@@ -323,24 +312,26 @@ export async function processNewsArticle(article: NewsArticle): Promise<Generate
 }
 
 /**
- * Fallback articles for when Manus API is unavailable
+ * Fallback articles for when NewsAPI is unavailable
  * These are real news stories from major outlets
  */
 function getFallbackArticles(): NewsArticle[] {
   const fallbackArticles: NewsArticle[] = [
     {
       title: "Global climate summit reaches agreement on emissions targets",
-      url: "https://www.bbc.com/news/world",
+      url: "https://www.bbc.com/news/science_and_environment",
       source: "BBC News",
       description: "World leaders have agreed on new targets to reduce carbon emissions by 50% by 2035, marking a significant step in climate action efforts.",
       content: "At the COP30 climate summit, representatives from over 190 countries have agreed on binding commitments to reduce global carbon emissions. The agreement includes specific targets for renewable energy adoption and forest preservation.",
+      publishedAt: new Date().toISOString(),
     },
     {
       title: "Major breakthrough in artificial intelligence research announced",
-      url: "https://www.reuters.com/technology",
+      url: "https://www.reuters.com/technology/artificial-intelligence/",
       source: "Reuters",
       description: "Researchers have developed a new AI model that significantly improves energy efficiency while maintaining performance.",
       content: "A team of international researchers has unveiled a breakthrough in artificial intelligence that reduces energy consumption by 40% compared to previous models, potentially revolutionizing the tech industry.",
+      publishedAt: new Date().toISOString(),
     },
     {
       title: "Stock markets surge on positive economic indicators",
@@ -348,6 +339,7 @@ function getFallbackArticles(): NewsArticle[] {
       source: "Financial Times",
       description: "Global stock indices have reached new highs following strong quarterly earnings reports and improved economic forecasts.",
       content: "Financial markets worldwide have responded positively to strong corporate earnings and improved economic forecasts, with major indices posting significant gains.",
+      publishedAt: new Date().toISOString(),
     },
     {
       title: "Medical researchers announce promising cancer treatment results",
@@ -355,6 +347,7 @@ function getFallbackArticles(): NewsArticle[] {
       source: "CNN",
       description: "A new immunotherapy treatment has shown remarkable success rates in early clinical trials for multiple cancer types.",
       content: "Researchers have announced breakthrough results from clinical trials of a new cancer immunotherapy that shows promise for treating multiple types of cancer with fewer side effects.",
+      publishedAt: new Date().toISOString(),
     },
   ];
 

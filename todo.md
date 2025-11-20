@@ -119,3 +119,17 @@
 - [x] Manus API を使用したニュース取得機能の実装
 - [x] 記事内容の詳実な読み込みと詳実なツイート生成
 - [x] 手動投稿機能でのテストと検証
+
+
+## Error Fixes (v4)
+- [x] ネットワーク接続エラー修正（401、ERR_INTERNET_DISCONNECTED、ERR_NETWORK_CHANGED）
+- [x] ブラウザキャッシュクリア
+- [x] ログイン状态の複旧
+
+## News API Integration (v5)
+- [x] NewsAPI キーを環境変数に追加
+- [x] newsEngine.ts を改善して NewsAPI から実際のニュースを取得
+- [x] 各記事に固有の URL を割り当てる
+- [x] Post Now ボタンで実際の最新ニュースが取得されることを検証
+
+
