@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, tweet_text, source_news_url, posted_at FROM posted_tweets ORDER BY posted_at DESC LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3tgv6NbJQ4yLEzD.c8a05f3e07a3 --database eq2K3uhXAnhKkfx8kHCxLL --execute SELECT id, tweet_text, source_news_url, posted_at FROM posted_tweets ORDER BY posted_at DESC LIMIT 3;",
+  "rows": [],
+  "messages": [
+    "210001\tNASA is sharing new comet pics. Meanwhile, I still can't get a clear photo of my neighbor's cat stealing my Amazon packages. Priorities, people! #3IATLAS #SpaceNews",
+    "Source: https://spaceanddefense.io/nasa-to-share-comet-3i-atlas-images-from-spacecraft-telescopes/\thttps://spaceanddefense.io/nasa-to-share-comet-3i-atlas-images-from-spacecraft-telescopes/\t2025-11-20 07:57:51",
+    "180001\tA 984ft cargo ship took down a major bridge because of ONE faulty wire. My charging cable has more structural integrity. #BaltimoreBridge #Dali",
+    "Source: https://www.aljazeera.com/news/2025/11/19/single-faulty-wire-led-cargo-ship-to-crash-into-baltimore-bridge-report\thttps://www.aljazeera.com/news/2025/11/19/single-faulty-wire-led-cargo-ship-to-crash-into-baltimore-bridge-report\t2025-11-20 07:51:09",
+    "150001\tCOP30 agreed! We’ve successfully committed to saving the planet, starting right after we fly home on 190 private jets. #ClimateAction #BindingCommitments",
+    "Source: https://www.bbc.com/news/world\thttps://www.bbc.com/news/world\t2025-11-19 12:20:23"
+  ],
+  "stdout": "id\ttweet_text\tsource_news_url\tposted_at\n210001\tNASA is sharing new comet pics. Meanwhile, I still can't get a clear photo of my neighbor's cat stealing my Amazon packages. Priorities, people! #3IATLAS #SpaceNews\n\nSource: https://spaceanddefense.io/nasa-to-share-comet-3i-atlas-images-from-spacecraft-telescopes/\thttps://spaceanddefense.io/nasa-to-share-comet-3i-atlas-images-from-spacecraft-telescopes/\t2025-11-20 07:57:51\n180001\tA 984ft cargo ship took down a major bridge because of ONE faulty wire. My charging cable has more structural integrity. #BaltimoreBridge #Dali\n\nSource: https://www.aljazeera.com/news/2025/11/19/single-faulty-wire-led-cargo-ship-to-crash-into-baltimore-bridge-report\thttps://www.aljazeera.com/news/2025/11/19/single-faulty-wire-led-cargo-ship-to-crash-into-baltimore-bridge-report\t2025-11-20 07:51:09\n150001\tCOP30 agreed! We’ve successfully committed to saving the planet, starting right after we fly home on 190 private jets. #ClimateAction #BindingCommitments\n\nSource: https://www.bbc.com/news/world\thttps://www.bbc.com/news/world\t2025-11-19 12:20:23\n",
+  "stderr": "",
+  "execution_time_ms": 677
+}
