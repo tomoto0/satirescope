@@ -33,6 +33,9 @@ export const twitterConfigs = mysqlTable("twitter_configs", {
   xAccessToken: text("x_access_token").notNull(), // Encrypted
   xAccessTokenSecret: text("x_access_token_secret").notNull(), // Encrypted
   isActive: int("is_active").default(1).notNull(), // 1 = true, 0 = false
+  scheduleIntervalMinutes: int("schedule_interval_minutes").default(60).notNull(), // Posting interval in minutes
+  scheduleStartHour: int("schedule_start_hour").default(0).notNull(), // Start hour (0-23)
+  scheduleEndHour: int("schedule_end_hour").default(23).notNull(), // End hour (0-23)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

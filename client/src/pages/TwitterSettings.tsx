@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { AlertCircle, CheckCircle, Trash2, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { AlertCircle, CheckCircle, Trash2, Eye, EyeOff, ArrowLeft, Clock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -19,6 +19,7 @@ export default function TwitterSettings() {
   const [showForm, setShowForm] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedSchedule, setExpandedSchedule] = useState<number | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -27,6 +28,13 @@ export default function TwitterSettings() {
     xAccessToken: "",
     xAccessTokenSecret: "",
   });
+
+  // Schedule form state
+  const [scheduleData, setScheduleData] = useState<Record<number, {
+    scheduleIntervalMinutes: number;
+    scheduleStartHour: number;
+    scheduleEndHour: number;
+  }>>({});
 
   // Queries
   const { data: configs, isLoading, refetch } = trpc.twitter.getConfigs.useQuery();
@@ -69,6 +77,17 @@ export default function TwitterSettings() {
     },
   });
 
+  const updateScheduleMutation = trpc.twitter.updateSchedule.useMutation({
+    onSuccess: () => {
+      toast.success("Posting schedule updated successfully!");
+      setExpandedSchedule(null);
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update schedule: ${error.message}`);
+    },
+  });
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -98,6 +117,44 @@ export default function TwitterSettings() {
     }
   };
 
+  const handleScheduleChange = (configId: number, field: string, value: number) => {
+    setScheduleData((prev) => ({
+      ...prev,
+      [configId]: {
+        ...prev[configId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleScheduleSubmit = async (configId: number) => {
+    const schedule = scheduleData[configId];
+    if (!schedule) return;
+
+    if (schedule.scheduleStartHour > schedule.scheduleEndHour) {
+      toast.error("Start hour must be less than or equal to end hour");
+      return;
+    }
+
+    await updateScheduleMutation.mutateAsync({
+      configId,
+      ...schedule,
+    });
+  };
+
+  const initializeScheduleForm = (config: any) => {
+    if (!scheduleData[config.id]) {
+      setScheduleData((prev) => ({
+        ...prev,
+        [config.id]: {
+          scheduleIntervalMinutes: config.scheduleIntervalMinutes || 60,
+          scheduleStartHour: config.scheduleStartHour || 0,
+          scheduleEndHour: config.scheduleEndHour || 23,
+        },
+      }));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -110,7 +167,7 @@ export default function TwitterSettings() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header with Back Button */}
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -243,60 +300,160 @@ export default function TwitterSettings() {
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-slate-900">Active Configurations</h2>
 
-            {configs.map((config) => (
-              <Card key={config.id} className="border-slate-200">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <div>
-                        <CardTitle className="text-lg">Configuration #{config.id}</CardTitle>
-                        <CardDescription>
-                          Created: {new Date(config.createdAt).toLocaleDateString()}
-                        </CardDescription>
+            {configs.map((config) => {
+              const schedule = scheduleData[config.id];
+              const isScheduleExpanded = expandedSchedule === config.id;
+
+              return (
+                <Card key={config.id} className="border-slate-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <div>
+                          <CardTitle className="text-lg">Configuration #{config.id}</CardTitle>
+                          <CardDescription>
+                            Created: {new Date(config.createdAt).toLocaleDateString()}
+                          </CardDescription>
+                        </div>
+                      </div>
+
+                      {/* Active Toggle */}
+                      <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2">
+                          <Label htmlFor={`toggle-${config.id}`} className="text-sm font-medium">
+                            {config.isActive ? "Active" : "Inactive"}
+                          </Label>
+                          <Switch
+                            id={`toggle-${config.id}`}
+                            checked={config.isActive}
+                            onCheckedChange={() => handleToggleActive(config.id)}
+                            disabled={toggleActiveMutation.isPending}
+                          />
+                        </div>
                       </div>
                     </div>
+                  </CardHeader>
 
-                    {/* Active Toggle */}
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-2">
-                        <Label htmlFor={`toggle-${config.id}`} className="text-sm font-medium">
-                          {config.isActive ? "Active" : "Inactive"}
-                        </Label>
-                        <Switch
-                          id={`toggle-${config.id}`}
-                          checked={config.isActive}
-                          onCheckedChange={() => handleToggleActive(config.id)}
-                          disabled={toggleActiveMutation.isPending}
-                        />
-                      </div>
+                  <CardContent className="space-y-4">
+                    {/* Posting Schedule Section */}
+                    <div className="border-t pt-4">
+                      <button
+                        onClick={() => {
+                          if (!isScheduleExpanded) {
+                            initializeScheduleForm(config);
+                          }
+                          setExpandedSchedule(isScheduleExpanded ? null : config.id);
+                        }}
+                        className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 w-full"
+                      >
+                        <Clock className="w-4 h-4" />
+                        <span>Posting Schedule</span>
+                        <span className="text-xs text-slate-500 ml-auto">
+                          {config.scheduleIntervalMinutes}min interval, {config.scheduleStartHour}:00 - {config.scheduleEndHour}:00
+                        </span>
+                      </button>
+
+                      {isScheduleExpanded && schedule && (
+                        <div className="mt-4 space-y-4 p-4 bg-slate-50 rounded-lg">
+                          <div>
+                            <Label htmlFor={`interval-${config.id}`} className="text-sm">
+                              Posting Interval (minutes)
+                            </Label>
+                            <Input
+                              id={`interval-${config.id}`}
+                              type="number"
+                              min="15"
+                              max="1440"
+                              value={schedule.scheduleIntervalMinutes}
+                              onChange={(e) =>
+                                handleScheduleChange(config.id, "scheduleIntervalMinutes", parseInt(e.target.value))
+                              }
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Minimum 15 minutes, maximum 24 hours (1440 minutes)</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor={`start-hour-${config.id}`} className="text-sm">
+                                Start Hour (0-23)
+                              </Label>
+                              <Input
+                                id={`start-hour-${config.id}`}
+                                type="number"
+                                min="0"
+                                max="23"
+                                value={schedule.scheduleStartHour}
+                                onChange={(e) =>
+                                  handleScheduleChange(config.id, "scheduleStartHour", parseInt(e.target.value))
+                                }
+                                className="mt-1"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor={`end-hour-${config.id}`} className="text-sm">
+                                End Hour (0-23)
+                              </Label>
+                              <Input
+                                id={`end-hour-${config.id}`}
+                                type="number"
+                                min="0"
+                                max="23"
+                                value={schedule.scheduleEndHour}
+                                onChange={(e) =>
+                                  handleScheduleChange(config.id, "scheduleEndHour", parseInt(e.target.value))
+                                }
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleScheduleSubmit(config.id)}
+                              disabled={updateScheduleMutation.isPending}
+                            >
+                              {updateScheduleMutation.isPending ? "Saving..." : "Save Schedule"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setExpandedSchedule(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </CardHeader>
 
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(config.id)}
-                      disabled={deleteConfigMutation.isPending}
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowForm(true)}
-                    >
-                      Update Credentials
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(config.id)}
+                        disabled={deleteConfigMutation.isPending}
+                        className="flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowForm(true)}
+                      >
+                        Update Credentials
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
 
             {/* Add Another Configuration Button */}
             <Button

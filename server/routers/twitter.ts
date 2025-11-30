@@ -26,6 +26,9 @@ export const twitterRouter = router({
       return configs.map((config) => ({
         id: config.id,
         isActive: config.isActive === 1,
+        scheduleIntervalMinutes: config.scheduleIntervalMinutes || 60,
+        scheduleStartHour: config.scheduleStartHour || 0,
+        scheduleEndHour: config.scheduleEndHour || 23,
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
       }));
@@ -249,6 +252,62 @@ export const twitterRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to retrieve credentials",
+        });
+      }
+    }),
+
+  /**
+   * Update posting schedule for a config
+   */
+  updateSchedule: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        scheduleIntervalMinutes: z.number().min(15).max(1440),
+        scheduleStartHour: z.number().min(0).max(23),
+        scheduleEndHour: z.number().min(0).max(23),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Verify ownership
+        const config = await getTwitterConfigById(input.configId);
+        if (!config || config.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You do not have permission to modify this configuration",
+          });
+        }
+
+        // Validate schedule
+        if (input.scheduleStartHour > input.scheduleEndHour) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Start hour must be less than or equal to end hour",
+          });
+        }
+
+        // Update schedule
+        const updateData: Record<string, unknown> = {
+          scheduleIntervalMinutes: input.scheduleIntervalMinutes,
+          scheduleStartHour: input.scheduleStartHour,
+          scheduleEndHour: input.scheduleEndHour,
+        };
+        await updateTwitterConfig(input.configId, updateData as any);
+
+        // Note: Scheduler will pick up the new schedule on next run
+        // For immediate effect, the scheduler would need to be restarted
+
+        return {
+          success: true,
+          message: "Posting schedule updated successfully. Changes will take effect on the next scheduled run.",
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error("[Twitter Router] Failed to update schedule:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update posting schedule",
         });
       }
     }),
