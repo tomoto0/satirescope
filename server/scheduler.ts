@@ -2,117 +2,178 @@ import * as cron from "node-cron";
 import { getActiveTwitterConfigs, getTwitterConfigById } from "./db";
 import { processNewsArticle, fetchNewsArticles } from "./newsEngine";
 import { postTweetWithImage } from "./twitterPoster";
+import { decryptReversible } from "./crypto";
 
 /**
- * Global scheduler instance
+ * Global scheduler instances - one per config
  */
-let schedulerTask: ReturnType<typeof cron.schedule> | null = null;
+const configSchedulers: Map<number, ReturnType<typeof cron.schedule>> = new Map();
 
 /**
  * Start the automated posting scheduler
- * Runs every hour at the top of the hour
+ * Creates individual schedulers for each active config based on their custom schedule settings
  */
-export function startScheduler(): void {
-  if (schedulerTask) {
-    console.log("[Scheduler] Scheduler already running");
-    return;
+export async function startScheduler(): Promise<void> {
+  console.log("[Scheduler] Starting scheduler system...");
+  
+  try {
+    const activeConfigs = await getActiveTwitterConfigs();
+    console.log(`[Scheduler] Found ${activeConfigs.length} active configurations`);
+    
+    for (const config of activeConfigs) {
+      await createConfigScheduler(config);
+    }
+    
+    console.log("[Scheduler] Scheduler system started");
+  } catch (error) {
+    console.error("[Scheduler] Failed to start scheduler:", error);
   }
+}
 
-  // Schedule to run every hour at minute 0
-  // Cron format: second minute hour day month dayOfWeek
-  schedulerTask = cron.schedule("0 0 * * * *", async () => {
-    console.log("[Scheduler] Running automated posting cycle...");
-    await runAutomatedPostingCycle();
-  });
+/**
+ * Create a scheduler for a specific config based on its custom schedule settings
+ */
+async function createConfigScheduler(config: any): Promise<void> {
+  try {
+    // Stop existing scheduler if any
+    if (configSchedulers.has(config.id)) {
+      const existingScheduler = configSchedulers.get(config.id);
+      if (existingScheduler) {
+        existingScheduler.stop();
+      }
+    }
 
-  console.log("[Scheduler] Scheduler started - runs every hour");
+    const intervalMinutes = config.scheduleIntervalMinutes || 60;
+    const startHour = config.scheduleStartHour || 0;
+    const endHour = config.scheduleEndHour || 23;
+
+    // Generate Cron expression based on interval
+    let cronExpression: string;
+    
+    if (intervalMinutes === 60) {
+      // Every hour at minute 0
+      cronExpression = `0 0 ${startHour}-${endHour} * * *`;
+    } else if (intervalMinutes === 30) {
+      // Every 30 minutes
+      cronExpression = `0 0,30 ${startHour}-${endHour} * * *`;
+    } else if (intervalMinutes === 15) {
+      // Every 15 minutes
+      cronExpression = `0 0,15,30,45 ${startHour}-${endHour} * * *`;
+    } else if (intervalMinutes < 60) {
+      // For other intervals less than 60 minutes, use step values
+      const step = Math.max(1, Math.floor(60 / intervalMinutes));
+      cronExpression = `0 */${step} ${startHour}-${endHour} * * *`;
+    } else {
+      // For intervals greater than 60 minutes, use hourly step
+      const hourStep = Math.max(1, Math.floor(intervalMinutes / 60));
+      cronExpression = `0 0 */${hourStep} * * *`;
+    }
+
+    console.log(`[Scheduler] Creating scheduler for config ${config.id}: interval=${intervalMinutes}min, hours=${startHour}-${endHour}, cron="${cronExpression}"`);
+
+    // Create new scheduler
+    const scheduler = cron.schedule(cronExpression, async () => {
+      console.log(`[Scheduler] Running automated posting cycle for config ${config.id}...`);
+      await runAutomatedPostingCycleForConfig(config);
+    });
+
+    configSchedulers.set(config.id, scheduler);
+    console.log(`[Scheduler] Scheduler created for config ${config.id}`);
+  } catch (error) {
+    console.error(`[Scheduler] Failed to create scheduler for config ${config.id}:`, error);
+  }
 }
 
 /**
  * Stop the scheduler
  */
 export function stopScheduler(): void {
-  if (schedulerTask) {
-    schedulerTask.stop();
-    schedulerTask = null;
-    console.log("[Scheduler] Scheduler stopped");
-  }
+  console.log("[Scheduler] Stopping all schedulers...");
+  
+  configSchedulers.forEach((scheduler, configId) => {
+    if (scheduler) {
+      scheduler.stop();
+      console.log(`[Scheduler] Stopped scheduler for config ${configId}`);
+    }
+  });
+  
+  configSchedulers.clear();
+  console.log("[Scheduler] All schedulers stopped");
 }
 
 /**
  * Check if scheduler is running
  */
 export function isSchedulerRunning(): boolean {
-  return schedulerTask !== null;
+  return configSchedulers.size > 0;
 }
 
 /**
- * Main automation cycle
- * 1. Fetch active Twitter configs
- * 2. Fetch latest news articles
- * 3. Generate content for each article
- * 4. Post to Twitter
+ * Update scheduler for a specific config (called when schedule settings change)
  */
-async function runAutomatedPostingCycle(): Promise<void> {
+export async function updateConfigScheduler(configId: number): Promise<void> {
   try {
-    console.log("[Scheduler] Starting automated posting cycle...");
-
-    // Step 1: Get all active Twitter configurations
-    const activeConfigs = await getActiveTwitterConfigs();
-    console.log(`[Scheduler] Found ${activeConfigs.length} active Twitter configurations`);
-
-    if (activeConfigs.length === 0) {
-      console.log("[Scheduler] No active configurations, skipping cycle");
+    console.log(`[Scheduler] Updating scheduler for config ${configId}...`);
+    
+    const config = await getTwitterConfigById(configId);
+    if (!config) {
+      console.error(`[Scheduler] Config ${configId} not found`);
       return;
     }
 
-    // Step 2: Fetch latest news articles
+    await createConfigScheduler(config);
+    console.log(`[Scheduler] Scheduler updated for config ${configId}`);
+  } catch (error) {
+    console.error(`[Scheduler] Failed to update scheduler for config ${configId}:`, error);
+  }
+}
+
+/**
+ * Automated posting cycle for a specific config
+ */
+async function runAutomatedPostingCycleForConfig(config: any): Promise<void> {
+  try {
+    console.log(`[Scheduler] Starting automated posting cycle for config ${config.id}...`);
+
+    // Check if config is still active
+    if (!config.isActive) {
+      console.log(`[Scheduler] Config ${config.id} is not active, skipping`);
+      return;
+    }
+
+    // Fetch latest news articles
     const articles = await fetchNewsArticles();
-    console.log(`[Scheduler] Fetched ${articles.length} news articles`);
+    console.log(`[Scheduler] Fetched ${articles.length} news articles for config ${config.id}`);
 
     if (articles.length === 0) {
-      console.log("[Scheduler] No articles found, skipping cycle");
+      console.log(`[Scheduler] No articles found for config ${config.id}, skipping`);
       return;
     }
 
-    // Step 3: Process each article and post to all active configs
-    for (const article of articles) {
-      try {
-        console.log(`[Scheduler] Processing article: ${article.title}`);
+    // Use the first article
+    const article = articles[0];
 
-        // Generate content for the article
-        const content = await processNewsArticle(article);
+    try {
+      console.log(`[Scheduler] Processing article for config ${config.id}: ${article.title}`);
 
-        // Post to all active Twitter accounts
-        for (const config of activeConfigs) {
-          try {
-            console.log(`[Scheduler] Posting to config ${config.id}...`);
+      // Generate content for the article
+      const content = await processNewsArticle(article);
 
-            // Post tweet with image if available
-            if (content.imageUrl) {
-              await postTweetWithImage(config, content.tweetText, content.imageUrl, article.url);
-            } else {
-              // Fallback to text-only tweet
-              console.log("[Scheduler] No image available, posting text-only tweet");
-              // TODO: Import and use postTweet function
-              // await postTweet(config, content.tweetText, article.url);
-            }
-
-            console.log(`[Scheduler] Successfully posted to config ${config.id}`);
-          } catch (error) {
-            console.error(`[Scheduler] Failed to post to config ${config.id}:`, error);
-            // Continue with next config instead of stopping
-          }
-        }
-      } catch (error) {
-        console.error(`[Scheduler] Failed to process article "${article.title}":`, error);
-        // Continue with next article instead of stopping
+      // Post tweet with image if available
+      if (content.imageUrl) {
+        console.log(`[Scheduler] Posting to config ${config.id}...`);
+        await postTweetWithImage(config, content.tweetText, content.imageUrl, article.url);
+        console.log(`[Scheduler] Successfully posted to config ${config.id}`);
+      } else {
+        console.log(`[Scheduler] No image available for config ${config.id}, skipping post`);
       }
+    } catch (error) {
+      console.error(`[Scheduler] Failed to process article for config ${config.id}:`, error);
     }
 
-    console.log("[Scheduler] Automated posting cycle completed");
+    console.log(`[Scheduler] Automated posting cycle completed for config ${config.id}`);
   } catch (error) {
-    console.error("[Scheduler] Fatal error in automated posting cycle:", error);
+    console.error(`[Scheduler] Fatal error in automated posting cycle for config ${config.id}:`, error);
   }
 }
 
@@ -121,5 +182,14 @@ async function runAutomatedPostingCycle(): Promise<void> {
  */
 export async function triggerManualCycle(): Promise<void> {
   console.log("[Scheduler] Manual cycle triggered");
-  await runAutomatedPostingCycle();
+  
+  try {
+    const activeConfigs = await getActiveTwitterConfigs();
+    
+    for (const config of activeConfigs) {
+      await runAutomatedPostingCycleForConfig(config);
+    }
+  } catch (error) {
+    console.error("[Scheduler] Failed to trigger manual cycle:", error);
+  }
 }

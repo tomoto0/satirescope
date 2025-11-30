@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { startScheduler } from "../scheduler";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -59,6 +60,12 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    
+    // Start the automated posting scheduler
+    console.log("[Server] Starting automated posting scheduler...");
+    startScheduler().catch(error => {
+      console.error("[Server] Failed to start scheduler:", error);
+    });
   });
 }
 
