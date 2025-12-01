@@ -109,6 +109,26 @@ export function isSchedulerRunning(): boolean {
 }
 
 /**
+ * Stop scheduler for a specific config
+ */
+export function stopConfigScheduler(configId: number): void {
+  try {
+    console.log(`[Scheduler] Stopping scheduler for config ${configId}...`);
+    
+    const scheduler = configSchedulers.get(configId);
+    if (scheduler) {
+      scheduler.stop();
+      configSchedulers.delete(configId);
+      console.log(`[Scheduler] Scheduler stopped for config ${configId}`);
+    } else {
+      console.log(`[Scheduler] No scheduler found for config ${configId}`);
+    }
+  } catch (error) {
+    console.error(`[Scheduler] Failed to stop scheduler for config ${configId}:`, error);
+  }
+}
+
+/**
  * Update scheduler for a specific config (called when schedule settings change)
  */
 export async function updateConfigScheduler(configId: number): Promise<void> {
@@ -121,6 +141,13 @@ export async function updateConfigScheduler(configId: number): Promise<void> {
       return;
     }
 
+    // If config is inactive, stop the scheduler
+    if (!config.isActive) {
+      stopConfigScheduler(configId);
+      return;
+    }
+
+    // Otherwise, create or update the scheduler
     await createConfigScheduler(config);
     console.log(`[Scheduler] Scheduler updated for config ${configId}`);
   } catch (error) {

@@ -10,6 +10,7 @@ import {
 } from "../db";
 import { encryptReversible, decryptReversible } from "../crypto";
 import { TRPCError } from "@trpc/server";
+import { updateConfigScheduler } from "../scheduler";
 
 /**
  * Twitter configuration router
@@ -178,6 +179,10 @@ export const twitterRouter = router({
 
         const newStatus = config.isActive === 1 ? 0 : 1;
         await updateTwitterConfig(input.configId, { isActive: newStatus });
+
+        // Update scheduler based on new status
+        console.log(`[Twitter Router] Toggling scheduler for config ${input.configId} to ${newStatus === 1 ? "active" : "inactive"}`);
+        await updateConfigScheduler(input.configId);
 
         return {
           success: true,

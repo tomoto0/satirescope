@@ -153,3 +153,10 @@
 - [x] newsEngine.ts と twitterPoster.ts でエラーが発生していないか確認
 - [x] 開発サーバーのログを確認して、自動投稿が実行されているか検証
 - [x] 自動投稿ロジックを修正して、スケジュール設定が正しく反映されるようにする
+
+
+## Active/Inactive Toggle Bug Fix (v9)
+- [x] twitter.ts で isActive を変更した時の処理を確認
+- [x] scheduler.ts でスケジューラーを正しく停止/再設定できるか検証
+- [x] Active/Inactive 変更時にスケジューラーを再設定するロジックを実装
+- [ ] Active/Inactive 切り替え機能をテストして、正常に動作することを検証
