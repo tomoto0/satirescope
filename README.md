@@ -4,6 +4,15 @@
 
 **SatireScope** is an innovative application that automatically fetches the latest news, generates witty satirical commentary using AI, creates custom AI-generated images, and posts them to your X (Twitter) account on a customizable schedule. The application combines real-time news aggregation, advanced language models, and image generation to create engaging, humorous content that keeps your audience entertained.
 
+## Home Screen
+
+![SatireScope Home Screen](./home-screen.jpg)
+
+The home screen showcases the application's core features with a clean, modern design featuring:
+- Prominent call-to-action buttons for configuration and viewing tweets
+- Feature highlights explaining automated posting, AI-generated content, and tweet tracking
+- Dark theme optimized for readability
+
 ### Live Demo
 
 **Public URL:** https://satirescope-eq2k3uhx.manus.space
@@ -294,15 +303,6 @@ VITE_ANALYTICS_WEBSITE_ID=your_website_id
 - Secure session management with JWT
 - OAuth-based user authentication
 - Environment variable isolation
-
-## Home Screen
-
-![SatireScope Home Screen](./home-screen.jpg)
-
-The home screen showcases the application's core features with a clean, modern design featuring:
-- Prominent call-to-action buttons for configuration and viewing tweets
-- Feature highlights explaining automated posting, AI-generated content, and tweet tracking
-- Dark theme optimized for readability
 
 ## Troubleshooting
 
